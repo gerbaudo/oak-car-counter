@@ -1,0 +1,20 @@
+# Path to the model file.
+# Accepts a Luxonis NNArchive (.tar.xz or .nnarchive — includes blob + YOLO config),
+# a raw superblob (.superblob), or a plain .blob file.
+model_blob_path: models/yolov8n.rvc2.tar.xz
+
+# Fraction of frame height where the counting line sits (0.0 = top, 1.0 = bottom)
+counting_line_y_fraction: 0.5
+
+# Calibration: how many pixels correspond to 1 metre at road level
+# See README "Calibrating pixels_per_meter" section
+pixels_per_meter: 120.0
+
+# Minimum fraction of frame width a vehicle must travel before speed is recorded
+min_track_width_fraction: 0.3
+
+# Save a cropped JPEG of each counted vehicle to data/frames/
+save_frames: false
+
+# Logging verbosity: DEBUG, INFO, WARNING, ERROR
+log_level: INFO

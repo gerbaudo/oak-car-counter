@@ -1,0 +1,25 @@
+[Unit]
+Description=OAK car counter — vehicle counting and speed estimation
+# Start after the login session is ready (udev-settled USB devices are available).
+After=multi-user.target
+
+[Service]
+# TODO: replace __USER__ and __PROJECT_DIR__ with real values, or run install.sh
+# which patches these automatically into /tmp/oak-car-counter.service.
+User=__USER__
+WorkingDirectory=__PROJECT_DIR__
+ExecStart=__PROJECT_DIR__/.venv/bin/python __PROJECT_DIR__/main.py
+
+# Restart if the process crashes (e.g. camera disconnected briefly)
+Restart=on-failure
+RestartSec=10s
+
+# Give the USB device a moment to settle on startup
+ExecStartPre=/bin/sleep 5
+
+# Write stdout/stderr to the system journal (view with: journalctl -u oak-car-counter -f)
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
