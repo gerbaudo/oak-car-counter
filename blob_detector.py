@@ -60,8 +60,9 @@ class BlobDetector:
         self._threshold: float = cfg.get("blob_change_threshold", 15.0)
 
         # Timeout = travel time at minimum speed of interest
-        min_speed_kmh: float = cfg.get("blob_min_speed_kmh", 1.0)
+        min_speed_kmh: float = cfg.get("blob_min_speed_kmh", 5.0)
         self._timeout_s: float = self._distance_m / (min_speed_kmh / 3.6)
+        self._max_speed_kmh: float = cfg.get("blob_max_speed_kmh", 150.0)
 
         self._state: str = self.IDLE
         self._first_time: Optional[float] = None
@@ -95,14 +96,18 @@ class BlobDetector:
             if now - self._first_time > self._timeout_s:
                 self._state = self.IDLE      # timeout — discard
             elif trig_b:
-                events.append(self._make_event("right", now - self._first_time))
+                ev = self._make_event("right", now - self._first_time)
+                if ev is not None:
+                    events.append(ev)
                 self._state = self.IDLE
 
         elif self._state == self.WAITING_A:
             if now - self._first_time > self._timeout_s:
                 self._state = self.IDLE
             elif trig_a:
-                events.append(self._make_event("left", now - self._first_time))
+                ev = self._make_event("left", now - self._first_time)
+                if ev is not None:
+                    events.append(ev)
                 self._state = self.IDLE
 
         return events
@@ -132,9 +137,13 @@ class BlobDetector:
             blob.background += self._bg_alpha * (value - blob.background)
         return triggered
 
-    def _make_event(self, direction: str, elapsed_s: float) -> dict:
-        speed_kmh = round(self._distance_m / elapsed_s * 3.6, 1) if elapsed_s > 0.01 else None
-        return {"direction": direction, "speed_kmh": speed_kmh, "source": "blob"}
+    def _make_event(self, direction: str, elapsed_s: float) -> Optional[dict]:
+        if elapsed_s < 0.01:
+            return None
+        speed_kmh = self._distance_m / elapsed_s * 3.6
+        if speed_kmh > self._max_speed_kmh:
+            return None
+        return {"direction": direction, "speed_kmh": round(speed_kmh, 1), "source": "blob"}
 
 
 # ---------------------------------------------------------------------------
