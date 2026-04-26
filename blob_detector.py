@@ -63,6 +63,8 @@ class BlobDetector:
         min_speed_kmh: float = cfg.get("blob_min_speed_kmh", 5.0)
         self._timeout_s: float = self._distance_m / (min_speed_kmh / 3.6)
         self._max_speed_kmh: float = cfg.get("blob_max_speed_kmh", 150.0)
+        # Tighter cap for standalone blob events (no YOLO confirmation)
+        self._standalone_max_kmh: float = cfg.get("blob_standalone_max_speed_kmh", 80.0)
 
         self._state: str = self.IDLE
         self._first_time: Optional[float] = None
@@ -143,7 +145,12 @@ class BlobDetector:
         speed_kmh = self._distance_m / elapsed_s * 3.6
         if speed_kmh > self._max_speed_kmh:
             return None
-        return {"direction": direction, "speed_kmh": round(speed_kmh, 1), "source": "blob"}
+        return {
+            "direction": direction,
+            "speed_kmh": round(speed_kmh, 1),
+            "source": "blob",
+            "_blob_speed_kmh": round(speed_kmh, 1),  # preserved for cross-check
+        }
 
 
 # ---------------------------------------------------------------------------

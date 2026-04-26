@@ -159,7 +159,8 @@ def main() -> None:
                             _cross_check(event, bevent, log)
                             track_speeds[event["_track_id"]] = event.get("speed_kmh")
                             banner_text, banner_expiry = _emit(
-                                log, storage, event, frame, clip_recorder, now), now + _BANNER_TTL
+                                log, storage, event, frame if frame is not None else last_frame,
+                                clip_recorder, now), now + _BANNER_TTL
                         else:
                             # Hold for up to _HOLD_S seconds for a blob to arrive
                             pending_yolo.append((now, event, frame if frame is not None else last_frame))
@@ -201,6 +202,7 @@ def main() -> None:
                 for t, bevent in recent_blob:
                     if now - t > _BLOB_YOLO_WINDOW:
                         bevent["vehicle_class"] = "unknown"
+                        _cap_standalone_blob_speed(bevent, blob_detector, log)
                         banner_text, banner_expiry = _emit(
                             log, storage, bevent, last_frame, clip_recorder, t), now + _BANNER_TTL
                     else:
@@ -232,6 +234,18 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 # Cross-check and correlation helpers
 # ---------------------------------------------------------------------------
+
+def _cap_standalone_blob_speed(bevent: dict, blob_detector, log) -> None:
+    """Nullify blob speed if it exceeds the standalone (unconfirmed) cap."""
+    cap = blob_detector._standalone_max_kmh
+    speed = bevent.get("speed_kmh")
+    if speed is not None and speed > cap:
+        log.warning(
+            "Blob-only speed %.1f km/h exceeds standalone cap %.0f km/h — speed set to None",
+            speed, cap,
+        )
+        bevent["speed_kmh"] = None
+
 
 def _match_idx(direction: str, recent_blob: list):
     """Return index of the most recent blob event with matching direction, or None."""

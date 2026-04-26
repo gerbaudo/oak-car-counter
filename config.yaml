@@ -39,6 +39,7 @@ blob_bg_alpha: 0.02
 blob_change_threshold: 25.0
 blob_min_speed_kmh: 5.0
 blob_max_speed_kmh: 150.0
+blob_standalone_max_speed_kmh: 80.0
 
 # Logging verbosity: DEBUG, INFO, WARNING, ERROR
 log_level: INFO
