@@ -133,7 +133,7 @@ class BlobDetector:
         return triggered
 
     def _make_event(self, direction: str, elapsed_s: float) -> dict:
-        speed_kmh = round(self._distance_m / elapsed_s * 3.6, 1)
+        speed_kmh = round(self._distance_m / elapsed_s * 3.6, 1) if elapsed_s > 0.01 else None
         return {"direction": direction, "speed_kmh": speed_kmh, "source": "blob"}
 
 

@@ -23,11 +23,12 @@ calibration_distance_m: 4.0
 min_track_width_fraction: 0.15
 
 # Save a cropped JPEG of each counted vehicle to data/frames/
-save_frames: false
+save_frames: true
 
 # Save short video clips around each detection to data/clips/
+# Clips are saved automatically in dry-run (calibration) mode; this flag is ignored.
 # pre_s: seconds of footage before the trigger; post_s: seconds after
-save_clips: true
+save_clips: false
 clip_pre_s: 3.0
 clip_post_s: 3.0
 clip_fps: 15.0

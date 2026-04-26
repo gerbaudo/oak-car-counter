@@ -79,7 +79,7 @@ def main() -> None:
     vehicle_tracker = VehicleTracker(cfg)
     blob_detector = BlobDetector(cfg)
     storage = Storage(cfg, dry_run=args.dry_run)
-    clip_recorder = ClipRecorder(cfg)
+    clip_recorder = ClipRecorder({**cfg, "save_clips": args.dry_run})
 
     running = True
 
