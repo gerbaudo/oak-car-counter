@@ -156,7 +156,7 @@ def main() -> None:
                         idx = _match_idx(event["direction"], recent_blob)
                         if idx is not None:
                             _, bevent = recent_blob.pop(idx)
-                            _cross_check(event, bevent, log)
+                            _cross_check(event, bevent, log, blob_detector._standalone_max_kmh)
                             track_speeds[event["_track_id"]] = event.get("speed_kmh")
                             banner_text, banner_expiry = _emit(
                                 log, storage, event, frame if frame is not None else last_frame,
@@ -189,7 +189,7 @@ def main() -> None:
                         idx = _pending_match_idx(bevent["direction"], pending_yolo)
                         if idx is not None:
                             t0, event, ev_frame = pending_yolo.pop(idx)
-                            _cross_check(event, bevent, log)
+                            _cross_check(event, bevent, log, blob_detector._standalone_max_kmh)
                             track_speeds[event["_track_id"]] = event.get("speed_kmh")
                             banner_text, banner_expiry = _emit(
                                 log, storage, event, ev_frame, clip_recorder, t0), now + _BANNER_TTL
@@ -263,13 +263,18 @@ def _pending_match_idx(direction: str, pending_yolo: list):
     return None
 
 
-def _cross_check(yolo_event: dict, blob_event: dict, log) -> None:
-    """Merge blob speed into yolo_event, warning if they disagree significantly."""
+def _cross_check(yolo_event: dict, blob_event: dict, log,
+                 standalone_cap: float = 80.0) -> None:
+    """Merge blob speed into yolo_event, warning if they disagree significantly.
+
+    On conflict, prefer blob only when blob speed is plausible (≤ standalone_cap).
+    When blob speed is implausibly high, keep YOLO — the blob likely had a
+    near-simultaneous trigger from a shadow or reflection.
+    """
     ys = yolo_event.get("speed_kmh")
     bs = blob_event.get("speed_kmh")
 
     if bs is None:
-        # Blob fired but had no valid speed; counts as confirmation without speed
         yolo_event["source"] = "blob+yolo"
         return
 
@@ -280,12 +285,22 @@ def _cross_check(yolo_event: dict, blob_event: dict, log) -> None:
 
     rel_diff = abs(ys - bs) / max(ys, bs)
     if rel_diff > _SPEED_TOLERANCE:
-        log.warning(
-            "Speed mismatch: yolo=%.1f  blob=%.1f km/h  (%.0f%% diff) — using blob estimate",
-            ys, bs, rel_diff * 100,
-        )
-        yolo_event["speed_kmh"] = bs
-        yolo_event["source"] = "blob+yolo(conflict)"
+        if bs > standalone_cap:
+            log.warning(
+                "Speed mismatch: yolo=%.1f  blob=%.1f km/h  (%.0f%% diff)"
+                " — blob implausible, keeping yolo",
+                ys, bs, rel_diff * 100,
+            )
+            yolo_event["source"] = "blob+yolo(conflict)"
+            # yolo speed unchanged
+        else:
+            log.warning(
+                "Speed mismatch: yolo=%.1f  blob=%.1f km/h  (%.0f%% diff)"
+                " — using blob estimate",
+                ys, bs, rel_diff * 100,
+            )
+            yolo_event["speed_kmh"] = bs
+            yolo_event["source"] = "blob+yolo(conflict)"
     else:
         yolo_event["speed_kmh"] = round((ys + bs) / 2, 1)
         yolo_event["source"] = "blob+yolo"
