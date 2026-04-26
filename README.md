@@ -77,21 +77,39 @@ The YOLOv8n model must be downloaded separately as a pre-compiled `.blob` file f
 All tuneable parameters live in `config.yaml`:
 
 ```yaml
-# Path to the compiled .blob model file
-model_blob_path: models/yolov8n.blob
+# Path to the model file (NNArchive .tar.xz/.nnarchive, superblob, or plain .blob)
+model_blob_path: models/yolov8n.rvc2.tar.xz
 
-# Fraction of frame height where the counting line sits (0.0 = top, 1.0 = bottom)
-counting_line_y_fraction: 0.5
+# Fraction of frame width where the vertical counting line sits (0.0 = left, 1.0 = right)
+# The road runs left-to-right in the frame.
+counting_line_x_fraction: 0.65
 
-# Calibration: how many pixels correspond to 1 metre at road level
-# See "Calibrating pixels_per_meter" below
-pixels_per_meter: 120.0
+# Calibration: pixels per metre at road level (derived during calibration — see below)
+pixels_per_meter: 37.5
 
-# Minimum fraction of frame width a vehicle must travel before speed is recorded
-min_track_width_fraction: 0.3
+# Calibration reference segment: two pixel coordinates on the road with a known
+# real-world distance between them. Displayed as a cyan overlay in --display mode.
+calibration_ref_a: [251, 374]
+calibration_ref_b: [401, 359]
+calibration_distance_m: 4.0
 
-# Save a cropped JPEG of each counted vehicle to data/frames/
-save_frames: false
+# Minimum fraction of frame width a vehicle must travel for YOLO speed to be recorded
+min_track_width_fraction: 0.15
+
+# Save an annotated full frame JPEG for each detection to data/frames/
+save_frames: true
+
+# Video clips (3 s pre + 3 s post) saved to data/clips/ — only active in --dry-run mode
+clip_pre_s: 3.0
+clip_post_s: 3.0
+clip_fps: 15.0
+
+# Blob detector — two pixel-change sensors at the calibration segment endpoints
+blob_change_threshold: 50.0       # brightness delta to trigger (0–255)
+blob_min_speed_kmh: 5.0           # discard slower transits (noise filter)
+blob_max_speed_kmh: 150.0         # discard implausibly fast transits
+blob_standalone_max_speed_kmh: 80.0  # cap for blob-only events (no YOLO confirmation)
+blob_bg_alpha: 0.02               # background EMA learning rate
 
 # Logging verbosity: DEBUG, INFO, WARNING, ERROR
 log_level: INFO
@@ -99,24 +117,40 @@ log_level: INFO
 
 ---
 
-## Calibrating `pixels_per_meter`
+## Calibration
 
-This is the most important setup step for accurate speed readings.
+Calibration sets up the speed reference segment and the counting line. Run once after mounting the camera.
 
-1. Place two objects with a **known distance between them** (e.g. 2 metres apart) on the road surface, in the part of the frame where vehicles will be tracked.
-2. Run the app in dry-run mode with display on:
-   ```bash
-   source .venv/bin/activate
-   python main.py --dry-run --display
-   ```
-3. Pause on a frame that shows both objects clearly (press **Space** to freeze).
-4. Note the pixel X-coordinates of each object (printed to console when you click, or measure from a screenshot).
-5. Calculate: `pixels_per_meter = pixel_distance / real_distance_metres`
-6. Update `config.yaml` with the result.
+### Step 1 — find the reference pixel coordinates
 
-> **Example:** objects are 2 m apart and appear 240 pixels apart → `pixels_per_meter: 120.0`
+Pick two points on the road surface with a **known real-world distance** between them (a road marking, a kerb gap, or any measurable feature works well — 3–5 m is ideal).
 
-Speed accuracy is typically ±10–20%, which is sufficient to distinguish slow from fast but is not suitable for enforcement purposes.
+```bash
+source .venv/bin/activate
+python main.py --dry-run --display
+```
+
+Click on the two road points in the preview window — their pixel coordinates are printed to the console. Press **Space** to freeze the frame if needed, **Q** to quit.
+
+### Step 2 — update `config.yaml`
+
+```yaml
+calibration_ref_a: [x1, y1]      # pixel coords of first point
+calibration_ref_b: [x2, y2]      # pixel coords of second point
+calibration_distance_m: 4.0      # real-world distance between them
+
+# Derived: pixel_distance / real_distance_m
+# e.g. sqrt((x2-x1)²+(y2-y1)²) = 150 px over 4 m → 37.5
+pixels_per_meter: 37.5
+```
+
+The cyan segment and two dots are drawn on the display overlay so you can verify the placement visually.
+
+### Step 3 — set the counting line
+
+`counting_line_x_fraction` controls where the green vertical trigger line sits. Place it where vehicles are fully visible from both sides — typically 0.5–0.7. Right-going vehicles need runway to the left of the line; left-going vehicles need runway to the right.
+
+> Speed accuracy is typically ±10–20%, sufficient to distinguish slow from fast traffic but **not suitable for enforcement**.
 
 ---
 
