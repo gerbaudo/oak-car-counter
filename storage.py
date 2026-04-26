@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS events (
     vehicle_class TEXT    NOT NULL,
     direction     TEXT    NOT NULL,
     speed_kmh     REAL,
+    source        TEXT,
     frame_path    TEXT
 )
 """
@@ -56,11 +57,12 @@ class Storage:
 
         if self._dry_run:
             log.info(
-                "[dry-run] %s  class=%s  dir=%s  speed=%s km/h",
+                "[dry-run] %s  class=%s  dir=%s  speed=%s km/h  source=%s",
                 ts,
                 event["vehicle_class"],
                 event["direction"],
                 event.get("speed_kmh"),
+                event.get("source", "yolo"),
             )
             return
 
@@ -69,13 +71,14 @@ class Storage:
             frame_path = self._save_crop(frame, event, ts)
 
         self._conn.execute(
-            "INSERT INTO events (timestamp, vehicle_class, direction, speed_kmh, frame_path)"
-            " VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO events (timestamp, vehicle_class, direction, speed_kmh, source, frame_path)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
             (
                 ts,
                 event["vehicle_class"],
                 event["direction"],
                 event.get("speed_kmh"),
+                event.get("source", "yolo"),
                 frame_path,
             ),
         )

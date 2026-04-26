@@ -3,18 +3,33 @@
 # a raw superblob (.superblob), or a plain .blob file.
 model_blob_path: models/yolov8n.rvc2.tar.xz
 
-# Fraction of frame height where the counting line sits (0.0 = top, 1.0 = bottom)
-counting_line_y_fraction: 0.5
+# Fraction of frame width where the vertical counting line sits (0.0 = left, 1.0 = right)
+# The road runs left-to-right in the frame; vehicles are counted when their centroid
+# crosses this vertical line.
+counting_line_x_fraction: 0.65
 
 # Calibration: how many pixels correspond to 1 metre at road level
 # See README "Calibrating pixels_per_meter" section
-pixels_per_meter: 120.0
+pixels_per_meter: 37.5
+
+# Calibration reference segment shown in the display overlay.
+# Set these to the two pixel coordinates you clicked during calibration,
+# and the real-world distance between them.
+calibration_ref_a: [251, 374]
+calibration_ref_b: [401, 359]
+calibration_distance_m: 4.0
 
 # Minimum fraction of frame width a vehicle must travel before speed is recorded
 min_track_width_fraction: 0.3
 
 # Save a cropped JPEG of each counted vehicle to data/frames/
 save_frames: false
+
+# Blob detector settings (two-sensor pixel-change speed estimator)
+# blob_radius_px: optional override; default is max(5, segment_px / 40)
+blob_bg_alpha: 0.02
+blob_change_threshold: 15.0
+blob_min_speed_kmh: 1.0
 
 # Logging verbosity: DEBUG, INFO, WARNING, ERROR
 log_level: INFO

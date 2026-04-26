@@ -17,15 +17,21 @@ _ACTIVE = {
 
 
 class VehicleTracker:
-    """Counts vehicles and estimates speed as they cross a virtual line."""
+    """Counts vehicles and estimates speed as they cross a virtual vertical line.
+
+    The road runs left-to-right in the frame.  The trigger line is vertical,
+    at counting_line_x_fraction of the frame width.  A vehicle is counted once
+    per track lifetime when its centroid X crosses that line.  Speed is
+    estimated from horizontal pixel displacement over time.
+    """
 
     def __init__(self, cfg: dict) -> None:
-        self._line_y: float = cfg["counting_line_y_fraction"]
+        self._line_x: float = cfg["counting_line_x_fraction"]
         self._px_per_m: float = cfg["pixels_per_meter"]
         self._min_width_frac: float = cfg["min_track_width_fraction"]
 
-        # {track_id: {"prev_cy": float|None, "x_history": [(mono_time, x_px)]}}
-        self._state: dict = defaultdict(lambda: {"prev_cy": None, "x_history": []})
+        # {track_id: {"prev_cx": float|None, "x_history": [(mono_time, x_px)]}}
+        self._state: dict = defaultdict(lambda: {"prev_cx": None, "x_history": []})
         # IDs that have already triggered a count (one count per track lifetime)
         self._counted: set = set()
 
@@ -57,7 +63,7 @@ class VehicleTracker:
             tid = t.id
             x1, y1, x2, y2 = _denorm_roi(t.roi, frame_width, frame_height)
             cx_px = (x1 + x2) / 2.0
-            cy_norm = ((y1 + y2) / 2.0) / frame_height
+            cx_norm = cx_px / frame_width
 
             state = self._state[tid]
 
@@ -68,13 +74,13 @@ class VehicleTracker:
                 (ts, x) for ts, x in state["x_history"] if ts >= cutoff
             ]
 
-            prev_cy = state["prev_cy"]
-            state["prev_cy"] = cy_norm
+            prev_cx = state["prev_cx"]
+            state["prev_cx"] = cx_norm
 
-            if tid in self._counted or prev_cy is None:
+            if tid in self._counted or prev_cx is None:
                 continue
 
-            if not _crossed(prev_cy, cy_norm, self._line_y):
+            if not _crossed(prev_cx, cx_norm, self._line_x):
                 continue
 
             self._counted.add(tid)
@@ -88,6 +94,7 @@ class VehicleTracker:
                     "direction": direction,
                     "speed_kmh": speed_kmh,
                     "_roi": (x1, y1, x2, y2),
+                    "_track_id": tid,
                 }
             )
 
@@ -129,9 +136,9 @@ def _denorm_roi(roi, frame_width: int, frame_height: int) -> tuple:
     return x1, y1, x2, y2
 
 
-def _crossed(prev_y: float, cur_y: float, line_y: float) -> bool:
-    """True when the centroid moves from one side of line_y to the other."""
-    return (prev_y < line_y <= cur_y) or (prev_y > line_y >= cur_y)
+def _crossed(prev_x: float, cur_x: float, line_x: float) -> bool:
+    """True when the centroid moves from one side of line_x to the other."""
+    return (prev_x < line_x <= cur_x) or (prev_x > line_x >= cur_x)
 
 
 def _direction(x_history: list) -> str:
