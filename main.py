@@ -88,7 +88,8 @@ def main() -> None:
     except OSError:
         pass
 
-    if not args.display:
+    need_preview = args.display or cfg.get("save_frames", False)
+    if not need_preview:
         q_preview = None
 
     if args.display:
