@@ -111,6 +111,7 @@ def main() -> None:
     track_speeds: dict = {}
     banner_text: str = ""
     banner_expiry: float = 0.0
+    last_frame = None   # most recent frame; used when no frame arrives in a given tick
 
     # pending_yolo: YOLO events held for blob cross-check before logging
     #   each entry: (fire_time, event_dict, frame_at_fire)
@@ -133,6 +134,7 @@ def main() -> None:
                 frame_msg = q_preview.tryGet()
                 if frame_msg is not None:
                     frame = frame_msg.getCvFrame()
+                    last_frame = frame
                     clip_recorder.push(frame, now)
 
             if not paused:
@@ -159,7 +161,7 @@ def main() -> None:
                                 log, storage, event, frame, clip_recorder, now), now + _BANNER_TTL
                         else:
                             # Hold for up to _HOLD_S seconds for a blob to arrive
-                            pending_yolo.append((now, event, frame))
+                            pending_yolo.append((now, event, frame if frame is not None else last_frame))
 
                 # ----- Drain pending YOLO events -----
                 still_pending = []
@@ -199,7 +201,7 @@ def main() -> None:
                     if now - t > _BLOB_YOLO_WINDOW:
                         bevent["vehicle_class"] = "unknown"
                         banner_text, banner_expiry = _emit(
-                            log, storage, bevent, frame, clip_recorder, t), now + _BANNER_TTL
+                            log, storage, bevent, last_frame, clip_recorder, t), now + _BANNER_TTL
                     else:
                         fresh_blob.append((t, bevent))
                 recent_blob = fresh_blob
