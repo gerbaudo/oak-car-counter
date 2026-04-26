@@ -10,6 +10,7 @@ import depthai as dai
 import yaml
 
 from blob_detector import BlobDetector
+from clip_recorder import ClipRecorder
 from pipeline import VEHICLE_LABELS, build_pipeline
 from storage import Storage
 from tracker import VehicleTracker, _denorm_roi
@@ -78,6 +79,7 @@ def main() -> None:
     vehicle_tracker = VehicleTracker(cfg)
     blob_detector = BlobDetector(cfg)
     storage = Storage(cfg, dry_run=args.dry_run)
+    clip_recorder = ClipRecorder(cfg)
 
     running = True
 
@@ -133,6 +135,7 @@ def main() -> None:
                 frame_msg = q_preview.tryGet()
                 if frame_msg is not None:
                     frame = frame_msg.getCvFrame()
+                    clip_recorder.push(frame, now)
 
             if not paused:
                 # ----- YOLO tracker -----
@@ -150,6 +153,7 @@ def main() -> None:
                         recent_yolo.append((now, event))
                         _log_and_store(log, storage, event, frame)
                         banner_text, banner_expiry = _make_banner(event), now + _BANNER_TTL
+                        clip_recorder.trigger(_clip_label(event), now)
 
                 # Prune stale YOLO events from correlation buffer
                 recent_yolo = [(t, e) for t, e in recent_yolo if now - t <= _BLOB_YOLO_WINDOW]
@@ -174,6 +178,7 @@ def main() -> None:
                             bevent["vehicle_class"] = "unknown"
                             _log_and_store(log, storage, bevent, frame)
                             banner_text, banner_expiry = _make_banner(bevent), now + _BANNER_TTL
+                            clip_recorder.trigger(_clip_label(bevent), now)
 
             # ----- display -----
             if args.display and frame is not None:
@@ -212,6 +217,12 @@ def _log_and_store(log, storage, event: dict, frame) -> None:
         event.get("source", "yolo"),
     )
     storage.log_event(event, frame)
+
+
+def _clip_label(event: dict) -> str:
+    speed = event.get("speed_kmh")
+    speed_str = f"_{speed}kmh" if speed is not None else ""
+    return f"{event['vehicle_class']}_{event['direction']}{speed_str}_{event.get('source', 'yolo')}"
 
 
 def _make_banner(event: dict) -> str:

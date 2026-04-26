@@ -6,7 +6,7 @@ model_blob_path: models/yolov8n.rvc2.tar.xz
 # Fraction of frame width where the vertical counting line sits (0.0 = left, 1.0 = right)
 # The road runs left-to-right in the frame; vehicles are counted when their centroid
 # crosses this vertical line.
-counting_line_x_fraction: 0.65
+counting_line_x_fraction: 0.5
 
 # Calibration: how many pixels correspond to 1 metre at road level
 # See README "Calibrating pixels_per_meter" section
@@ -20,10 +20,17 @@ calibration_ref_b: [401, 359]
 calibration_distance_m: 4.0
 
 # Minimum fraction of frame width a vehicle must travel before speed is recorded
-min_track_width_fraction: 0.3
+min_track_width_fraction: 0.15
 
 # Save a cropped JPEG of each counted vehicle to data/frames/
 save_frames: false
+
+# Save short video clips around each detection to data/clips/
+# pre_s: seconds of footage before the trigger; post_s: seconds after
+save_clips: true
+clip_pre_s: 3.0
+clip_post_s: 3.0
+clip_fps: 15.0
 
 # Blob detector settings (two-sensor pixel-change speed estimator)
 # blob_radius_px: optional override; default is max(5, segment_px / 40)

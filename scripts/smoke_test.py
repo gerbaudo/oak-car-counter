@@ -44,7 +44,7 @@ try:
     cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
     check("config.yaml loads", True)
     required_keys = [
-        "model_blob_path", "counting_line_y_fraction",
+        "model_blob_path", "counting_line_x_fraction",
         "pixels_per_meter", "min_track_width_fraction",
         "save_frames", "log_level",
     ]
@@ -127,18 +127,19 @@ if dai_available:
             return SimpleNamespace(tracklets=tracklets)
 
         S = dai.Tracklet.TrackingStatus
+        # Tracker now uses counting_line_x_fraction (vertical trigger line)
         vt = VehicleTracker(cfg)
 
-        # -- Frame 1: vehicle (car=2) appears near top, centroid y ≈ 0.2
-        t1 = make_tracklet(1, 2, S.NEW, 100, 100, 200, 140)   # cy_norm ≈ 0.19
+        # -- Frame 1: vehicle (car=2) appears on left, centroid x_norm ≈ 0.23
+        t1 = make_tracklet(1, 2, S.NEW, 100, 100, 200, 140)
         events = vt.process(make_msg([t1]), 640, 640)
         check("No event before crossing", len(events) == 0)
 
-        # -- Frames 2-8: vehicle moves right across the frame, descending
+        # -- Frames 2-8: vehicle moves right, crosses x_fraction=0.5 around step 3
         import time as _time
         for step in range(7):
             x_off = (step + 1) * 50
-            y_off = (step + 1) * 35  # crosses y=0.5 around step 4
+            y_off = (step + 1) * 10
             t1 = make_tracklet(1, 2, S.TRACKED,
                                 100 + x_off, 100 + y_off,
                                 200 + x_off, 140 + y_off)
@@ -171,9 +172,72 @@ if dai_available:
 
 
 # ---------------------------------------------------------------------------
-# 4. Pipeline / blob check
+# 4. Blob detector logic (no camera needed)
 # ---------------------------------------------------------------------------
-print("\n--- 4. Pipeline ---")
+print("\n--- 4. Blob detector logic ---")
+try:
+    import cv2
+    import numpy as np
+    from blob_detector import BlobDetector
+
+    blob_cfg = {
+        "calibration_ref_a": [100, 200],
+        "calibration_ref_b": [250, 200],
+        "calibration_distance_m": 4.0,
+        "blob_bg_alpha": 0.02,
+        "blob_change_threshold": 15.0,
+        "blob_min_speed_kmh": 1.0,
+    }
+    bd = BlobDetector(blob_cfg)
+    check("BlobDetector created", True)
+    check("Initial state is IDLE", bd.state == "IDLE")
+
+    # Blank frame — no trigger expected
+    blank = np.zeros((640, 640, 3), dtype=np.uint8)
+    bd.process(blank, now=0.0)  # initialises background
+    events = bd.process(blank, now=0.1)
+    check("No event on uniform blank frame", events == [])
+    check("State still IDLE after blank frame", bd.state == "IDLE")
+
+    # Bright patch at blob A → state should become WAITING_B
+    frame_a = blank.copy()
+    cx, cy, r = blob_cfg["calibration_ref_a"][0], blob_cfg["calibration_ref_a"][1], bd.blob_a.radius
+    cv2.circle(frame_a, (cx, cy), r, (255, 255, 255), -1)
+    bd.process(frame_a, now=0.2)
+    check("State WAITING_B after blob A triggers", bd.state == "WAITING_B")
+
+    # Bright patch at blob B → crossing event expected
+    frame_b = blank.copy()
+    cx2, cy2 = blob_cfg["calibration_ref_b"][0], blob_cfg["calibration_ref_b"][1]
+    cv2.circle(frame_b, (cx2, cy2), bd.blob_b.radius, (255, 255, 255), -1)
+    events = bd.process(frame_b, now=0.5)
+    check("Event emitted when both blobs fire", len(events) == 1)
+    if events:
+        check("Direction is 'right'", events[0]["direction"] == "right")
+        check("source == 'blob'", events[0]["source"] == "blob")
+        check("speed_kmh is positive", events[0]["speed_kmh"] > 0)
+    check("State returns to IDLE after event", bd.state == "IDLE")
+
+    # Timeout: A fires but B never fires within timeout
+    bd2 = BlobDetector(blob_cfg)
+    bd2.process(blank, now=0.0)   # init background
+    bd2.process(frame_a, now=0.1)
+    check("WAITING_B after A", bd2.state == "WAITING_B")
+    big_t = bd2._timeout_s + 1.0
+    events2 = bd2.process(blank, now=0.1 + big_t)
+    check("Timeout resets to IDLE", bd2.state == "IDLE")
+    check("No event on timeout", events2 == [])
+
+except Exception as exc:
+    import traceback
+    check("Blob detector suite", False, str(exc))
+    traceback.print_exc()
+
+
+# ---------------------------------------------------------------------------
+# 5. Pipeline / blob check
+# ---------------------------------------------------------------------------
+print("\n--- 5. Pipeline / live device ---")
 if not dai_available:
     print("  [INFO] depthai not installed — skipping pipeline test")
 else:
