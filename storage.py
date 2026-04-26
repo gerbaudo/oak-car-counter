@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import cv2
+import numpy as np
 
 log = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ CREATE TABLE IF NOT EXISTS events (
 
 
 class Storage:
-    """SQLite-backed event log with optional per-vehicle JPEG crop."""
+    """SQLite-backed event log with optional annotated full-frame JPEG."""
 
     def __init__(self, cfg: dict, dry_run: bool = False) -> None:
         self._dry_run = dry_run
@@ -45,14 +46,6 @@ class Storage:
 
     # ------------------------------------------------------------------
     def log_event(self, event: dict, frame=None) -> None:
-        """Persist one vehicle-crossing event.
-
-        Args:
-            event: dict from VehicleTracker.process() — must contain
-                   vehicle_class, direction, speed_kmh, and optionally _roi.
-            frame: full 640×640 BGR numpy array from the preview queue, or
-                   None.  Used only when save_frames=true.
-        """
         ts = datetime.now(timezone.utc).isoformat()
 
         if self._dry_run:
@@ -68,7 +61,7 @@ class Storage:
 
         frame_path: Optional[str] = None
         if self._save_frames and frame is not None:
-            frame_path = self._save_crop(frame, event, ts)
+            frame_path = self._save_annotated(frame, event, ts)
 
         self._conn.execute(
             "INSERT INTO events (timestamp, vehicle_class, direction, speed_kmh, source, frame_path)"
@@ -91,23 +84,55 @@ class Storage:
             self._conn = None
 
     # ------------------------------------------------------------------
-    def _save_crop(self, frame, event: dict, ts: str) -> Optional[str]:
+    def _save_annotated(self, frame, event: dict, ts: str) -> Optional[str]:
+        img = frame.copy()
+
+        # Bounding box (YOLO events only)
         roi = event.get("_roi")
-        if roi is None:
-            return None
+        if roi is not None:
+            x1, y1, x2, y2 = roi
+            cv2.rectangle(img, (x1, y1), (x2, y2), (0, 200, 255), 2)
 
-        x1, y1, x2, y2 = roi
-        # Clamp to frame bounds
-        h, w = frame.shape[:2]
-        x1, x2 = max(0, x1), min(w, x2)
-        y1, y2 = max(0, y1), min(h, y2)
-        if x2 <= x1 or y2 <= y1:
-            return None
+        # Annotation banner at top
+        cls = event["vehicle_class"]
+        direction = event["direction"]
+        speed = event.get("speed_kmh")
+        source = event.get("source", "yolo")
+        speed_str = f"{speed} km/h" if speed is not None else "speed=?"
 
-        crop = frame[y1:y2, x1:x2]
-        # Sanitise timestamp for use as a filename
+        # Human-readable local timestamp (UTC shown)
+        ts_short = ts[:19].replace("T", " ") + " UTC"
+
+        lines = [
+            ts_short,
+            f"{cls}  {direction}  {speed_str}  [{source}]",
+        ]
+
+        _draw_banner(img, lines)
+
         safe_ts = ts.replace(":", "-").replace(".", "-")
-        fname = f"{safe_ts}_{event['vehicle_class']}.jpg"
+        fname = f"{safe_ts}_{cls}_{direction}.jpg"
         path = str(_FRAMES_DIR / fname)
-        cv2.imwrite(path, crop)
+        cv2.imwrite(path, img)
         return path
+
+
+# ---------------------------------------------------------------------------
+
+def _draw_banner(img, lines: list) -> None:
+    """Draw a semi-transparent dark bar at the top of img with text lines."""
+    h, w = img.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.5
+    thickness = 1
+    pad = 5
+    line_h = 18
+
+    bar_h = pad + len(lines) * line_h + pad
+    overlay = img.copy()
+    cv2.rectangle(overlay, (0, 0), (w, bar_h), (20, 20, 20), -1)
+    cv2.addWeighted(overlay, 0.55, img, 0.45, 0, img)
+
+    for i, text in enumerate(lines):
+        y = pad + (i + 1) * line_h - 3
+        cv2.putText(img, text, (pad, y), font, scale, (255, 255, 255), thickness, cv2.LINE_AA)
