@@ -169,39 +169,38 @@ The SQLite database is at `data/counts.db`. The `events` table has these columns
 |---|---|---|
 | `id` | INTEGER | Auto-increment primary key |
 | `timestamp` | TEXT | ISO 8601, UTC |
-| `vehicle_class` | TEXT | `car`, `truck`, `bus`, `motorcycle` |
+| `vehicle_class` | TEXT | `car`, `truck`, `bus`, `motorcycle`, `unknown` |
 | `direction` | TEXT | `left` or `right` |
-| `speed_kmh` | REAL | Estimated speed, or NULL if track was too short |
-| `frame_path` | TEXT | Path to saved crop, or NULL |
+| `speed_kmh` | REAL | Estimated speed, or NULL if unreliable |
+| `source` | TEXT | `yolo`, `blob`, `blob+yolo`, `blob+yolo(conflict)` |
+| `frame_path` | TEXT | Path to annotated JPEG, or NULL |
 
-### Useful queries
+### Query script
 
-**Total vehicles today:**
-```sql
-SELECT COUNT(*) FROM events
-WHERE date(timestamp) = date('now');
+```bash
+source .venv/bin/activate
+
+python scripts/query.py            # last 20 events + summary
+python scripts/query.py -n 50     # last 50 events
+python scripts/query.py -n 0      # all events
+python scripts/query.py --hours 6 # last 6 hours
+python scripts/query.py --today   # today only
+python scripts/query.py --summary # summary stats only (no row listing)
 ```
 
-**Hourly breakdown:**
-```sql
-SELECT strftime('%H', timestamp) AS hour, COUNT(*) AS count
-FROM events
-WHERE date(timestamp) = date('now')
-GROUP BY hour
-ORDER BY hour;
-```
+### Direct SQL
 
-**Average speed by vehicle class:**
-```sql
-SELECT vehicle_class, ROUND(AVG(speed_kmh), 1) AS avg_speed_kmh, COUNT(*) AS n
-FROM events
-WHERE speed_kmh IS NOT NULL
-GROUP BY vehicle_class;
-```
-
-**Export to CSV (run from shell):**
+**Export to CSV:**
 ```bash
 sqlite3 -csv -header data/counts.db "SELECT * FROM events ORDER BY timestamp;" > export.csv
+```
+
+**Average speed by class (confirmed detections only):**
+```sql
+SELECT vehicle_class, ROUND(AVG(speed_kmh), 1) AS avg_kmh, COUNT(*) AS n
+FROM events
+WHERE speed_kmh IS NOT NULL AND source != 'blob'
+GROUP BY vehicle_class;
 ```
 
 ---
