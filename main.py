@@ -212,9 +212,10 @@ def main() -> None:
             # ----- display -----
             if args.display and frame is not None:
                 banner = banner_text if now < banner_expiry else ""
-                _draw_overlay(frame, cfg, tracklets_msg, track_speeds,
+                display_frame = frame.copy()
+                _draw_overlay(display_frame, cfg, tracklets_msg, track_speeds,
                               blob_detector=blob_detector, banner=banner)
-                cv2.imshow(_WIN_NAME, frame)
+                cv2.imshow(_WIN_NAME, display_frame)
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):
                     running = False

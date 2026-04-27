@@ -50,7 +50,7 @@ class BlobDetector:
         dx = ref_b[0] - ref_a[0]
         dy = ref_b[1] - ref_a[1]
         segment_px = math.sqrt(dx ** 2 + dy ** 2)
-        default_radius = max(5, int(segment_px / 40))
+        default_radius = max(15, int(segment_px / 6))
         radius = cfg.get("blob_radius_px", default_radius)
 
         self._blob_a = _Blob(center=(int(ref_a[0]), int(ref_a[1])), radius=radius)
